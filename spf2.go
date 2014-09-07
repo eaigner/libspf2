@@ -8,10 +8,8 @@ package libspf2
 #include <netdb.h>
 #include <spf2/spf.h>
 */
-import (
-	"C"
-	"errors"
-)
+import "C"
+import "errors"
 
 const (
 	SPFResultINVALID   = Result(C.SPF_RESULT_INVALID)   // (invalid)
@@ -26,7 +24,7 @@ const (
 
 type Client interface {
 	Query(host, ip string) (Result, error)
-	Close() error
+	Close()
 }
 
 type clientImpl struct {
@@ -52,7 +50,8 @@ func (s *clientImpl) Query(host, ip string) (Result, error) {
 	if err := req.setIPv4Addr(ip); err != nil {
 		return SPFResultINVALID, err
 	}
-	if resp, err := req.query(); err != nil {
+	resp, err := req.query()
+	if err != nil {
 		return SPFResultNONE, err
 	}
 	defer resp.free()
@@ -63,9 +62,7 @@ func (s *clientImpl) Close() {
 	if s.s != nil {
 		C.SPF_server_free(s.s)
 		s.s = nil
-		return nil
 	}
-	return errors.New("already closed")
 }
 
 type request struct {
@@ -74,7 +71,7 @@ type request struct {
 }
 
 func newRequest(s *clientImpl) *request {
-	r := new(Request)
+	r := new(request)
 	r.s = s
 	r.r = C.SPF_request_new(s.s)
 	return r
@@ -101,7 +98,7 @@ func (r *request) setEnvFrom(fromHost string) error {
 }
 
 // Query starts the SPF query
-func (r *Request) query() (*response, error) {
+func (r *request) query() (*response, error) {
 	var stat C.SPF_errcode_t
 	var resp *C.SPF_response_t
 	stat = C.SPF_request_query_mailfrom(r.r, &resp)
@@ -124,7 +121,7 @@ type response struct {
 }
 
 // Result returns the SPF validation result
-func (r *response) result() result {
+func (r *response) result() Result {
 	return Result(C.SPF_response_result(r.r))
 }
 
