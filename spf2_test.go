@@ -5,29 +5,41 @@ import (
 )
 
 func TestSpf2(t *testing.T) {
-	s := NewServer()
-	defer s.Free()
+	c := NewClient()
+	defer c.Close()
 
-	req := NewRequest(s)
-	defer req.Free()
+	req := newRequest(c.(*clientImpl))
+	defer req.free()
 
-	err := req.SetIPv4Addr("173.194.39.150")
+	err := req.setIPv4Addr("173.194.39.150")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = req.SetEnvFrom("gmail.com")
+	err = req.setEnvFrom("gmail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := req.Query()
+	resp, err := req.query()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Free()
+	defer resp.free()
 
-	res := resp.Result()
+	res := resp.result()
 	if res != SPFResultPASS {
 		t.Fatal(res)
+	}
+	if s := res.String(); s != "pass" {
+		t.Fatal(s)
+	}
+}
+
+func TestInterface(t *testing.T) {
+	client := NewClient()
+	defer client.Close()
+	res, err := client.Query("gmail.com", "173.194.39.150")
+	if err != nil {
+		t.Fatalf("client.Query() err = %v, expected nil", err)
 	}
 	if s := res.String(); s != "pass" {
 		t.Fatal(s)

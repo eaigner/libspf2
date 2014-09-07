@@ -9,6 +9,7 @@ package libspf2
 #include <spf2/spf.h>
 */
 import "C"
+import "errors"
 
 const (
 	SPFResultINVALID   = Result(C.SPF_RESULT_INVALID)   // (invalid)
@@ -21,40 +22,63 @@ const (
 	SPFResultNONE      = Result(C.SPF_RESULT_NONE)      // none
 )
 
-type Server struct {
+type Client interface {
+	Query(host, ip string) (Result, error)
+	Close()
+}
+
+type clientImpl struct {
 	s *C.SPF_server_t
 }
 
-// NewServer creates a new server
-func NewServer() *Server {
-	srv := new(Server)
-	srv.s = C.SPF_server_new(C.SPF_DNS_CACHE, 0)
-	return srv
+// NewClient creates a new SPF client.
+func NewClient() Client {
+	client := new(clientImpl)
+	client.s = C.SPF_server_new(C.SPF_DNS_CACHE, 0)
+	return client
 }
 
-// Free frees the server handle
-func (s *Server) Free() {
+func (s *clientImpl) Query(host, ip string) (Result, error) {
+	if s.s == nil {
+		return SPFResultINVALID, errors.New("client already closed")
+	}
+	req := newRequest(s)
+	defer req.free()
+	if err := req.setEnvFrom(host); err != nil {
+		return SPFResultINVALID, err
+	}
+	if err := req.setIPv4Addr(ip); err != nil {
+		return SPFResultINVALID, err
+	}
+	resp, err := req.query()
+	if err != nil {
+		return SPFResultNONE, err
+	}
+	defer resp.free()
+	return resp.result(), nil
+}
+
+func (s *clientImpl) Close() {
 	if s.s != nil {
 		C.SPF_server_free(s.s)
 		s.s = nil
 	}
 }
 
-type Request struct {
-	s *Server
+type request struct {
+	s *clientImpl
 	r *C.SPF_request_t
 }
 
-// NewRequest creates a new SPF request
-func NewRequest(s *Server) *Request {
-	r := new(Request)
+func newRequest(s *clientImpl) *request {
+	r := new(request)
 	r.s = s
 	r.r = C.SPF_request_new(s.s)
 	return r
 }
 
 // SetIPv4Addr sets the sender IPv4
-func (r *Request) SetIPv4Addr(addr string) error {
+func (r *request) setIPv4Addr(addr string) error {
 	var stat C.SPF_errcode_t
 	stat = C.SPF_request_set_ipv4_str(r.r, C.CString(addr))
 	if stat != C.SPF_E_SUCCESS {
@@ -64,7 +88,7 @@ func (r *Request) SetIPv4Addr(addr string) error {
 }
 
 // SetEnvFrom sets the sender host
-func (r *Request) SetEnvFrom(fromHost string) error {
+func (r *request) setEnvFrom(fromHost string) error {
 	var stat C.int
 	stat = C.SPF_request_set_env_from(r.r, C.CString(fromHost))
 	if stat != C.int(C.SPF_E_SUCCESS) {
@@ -74,35 +98,35 @@ func (r *Request) SetEnvFrom(fromHost string) error {
 }
 
 // Query starts the SPF query
-func (r *Request) Query() (*Response, error) {
+func (r *request) query() (*response, error) {
 	var stat C.SPF_errcode_t
 	var resp *C.SPF_response_t
 	stat = C.SPF_request_query_mailfrom(r.r, &resp)
 	if stat != C.SPF_E_SUCCESS {
 		return nil, &spfError{stat}
 	}
-	return &Response{resp}, nil
+	return &response{resp}, nil
 }
 
 // Free the request handle
-func (r *Request) Free() {
+func (r *request) free() {
 	if r.r != nil {
 		C.SPF_request_free(r.r)
 		r.r = nil
 	}
 }
 
-type Response struct {
+type response struct {
 	r *C.SPF_response_t
 }
 
 // Result returns the SPF validation result
-func (r *Response) Result() Result {
+func (r *response) result() Result {
 	return Result(C.SPF_response_result(r.r))
 }
 
 // Free frees the response handle
-func (r *Response) Free() {
+func (r *response) free() {
 	if r.r != nil {
 		C.SPF_response_free(r.r)
 		r.r = nil
