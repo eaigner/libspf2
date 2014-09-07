@@ -5,27 +5,27 @@ import (
 )
 
 func TestSpf2(t *testing.T) {
-	s := NewServer()
-	defer s.Free()
+	c := NewClient()
+	defer c.Free()
 
-	req := NewRequest(s)
+	req := newRequest(c)
 	defer req.Free()
 
-	err := req.SetIPv4Addr("173.194.39.150")
+	err := req.setIPv4Addr("173.194.39.150")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = req.SetEnvFrom("gmail.com")
+	err = req.setEnvFrom("gmail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := req.Query()
+	resp, err := req.query()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Free()
+	defer resp.free()
 
-	res := resp.Result()
+	res := resp.result()
 	if res != SPFResultPASS {
 		t.Fatal(res)
 	}
